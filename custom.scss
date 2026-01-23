@@ -1,0 +1,56 @@
+/*-- scss:defaults --*/
+
+// Fuentes modernas
+@import url('https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&family=JetBrains+Mono:wght@300;400;700&display=swap');
+
+$font-family-sans-serif: "Ubuntu", sans-serif;
+$font-family-monospace: "JetBrains Mono", monospace;
+
+// Paleta de "Papel Moderno"
+$body-bg: #fdfdfd;       // Blanco "hueso" muy suave para evitar fatiga
+$body-color: #2c3e50;    // Gris azulado muy oscuro para el texto
+$link-color: #2980b9;    // Azul tinta para los enlaces
+$primary: #34495e;       // Color para títulos y elementos estructurales
+
+// Ajustes tipográficos editoriales
+$font-size-root: 18px;   // Un poco más grande, estilo ensayo
+$line-height-base: 1.7;  // Más aire entre líneas para legibilidad
+
+/*-- scss:rules --*/
+
+// Simulación de "página de papel"
+.page-columns {
+  background-color: $body-bg;
+}
+
+// Títulos con peso y elegancia
+h1, h2, h3 {
+  font-weight: 700;
+  color: $primary;
+  margin-top: 1.5em;
+  letter-spacing: -0.01em;
+}
+
+// Bloques de código limpios (estilo Nerd Font/Moderno)
+.sourceCode {
+  background-color: #f8f9fa !important; // Un gris casi imperceptible
+  border: 1px solid #eeeeee;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+// Citas (Blockquotes) estilo académico
+blockquote {
+  border-left: 4px solid #d1d1d1;
+  color: #555;
+  font-style: italic;
+  padding-left: 1.5em;
+  margin: 2em 0;
+}
+
+// Navbar minimalista que se funde con el fondo
+.navbar {
+  border-bottom: 1px solid #ececec;
+  background-color: rgba(253, 253, 253, 0.9) !important;
+  backdrop-filter: blur(5px);
+}

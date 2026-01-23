@@ -1,0 +1,52 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Edgardo Marchi"
+  description: "IA, Incertidumbre, Cosmología y Pensamiento Crítico"
+  site-url: "https://edgardomarchi.github.io"
+  
+  # Configuración del menú bilingüe
+  navbar:
+    right:
+      - text: "Español"
+        href: /es/index.html
+      - text: "English"
+        href: /en/index.html
+      - icon: github
+        href: https://github.com/edgardomarchi
+      - icon: linkedin
+        href: https://www.linkedin.com/in/edgardomarchi/
+
+  # Metadatos para redes sociales (SEO)
+  open-graph: true
+  twitter-card:
+    site: "@tu_usuario" # Cambia por tu usuario de X si tienes
+    card-style: summary_large_image
+
+format:
+  html:
+    theme: 
+      light: [cosmo, custom.scss]
+    highlight-style: pygments  # Un estilo clásico y muy legible sobre fondo claro
+    mainfont: "Ubuntu"
+    monofont: "JetBrains Mono"
+    fontsize: 1.1em
+    page-layout: article
+    content-width: 850px
+    code-fold: true       # Permite colapsar el código
+    toc: true             # Tabla de contenidos a la derecha
+    number-sections: true
+  
+  # Soporte para Typst (Generación de PDF profesional)
+  typst:
+    papersize: a4
+    margin:
+      x: 2cm
+      y: 2cm
+
+# Para que Quarto sepa qué idioma usar en cada carpeta
+metadata-files:
+  - es/_metadata.yml
+  - en/_metadata.yml

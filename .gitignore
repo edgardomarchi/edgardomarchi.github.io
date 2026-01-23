@@ -1,0 +1,38 @@
+# --- Quarto ---
+# Ignoramos la carpeta de salida (se genera en GitHub Actions o localmente)
+/_site/
+# Ignoramos la carpeta interna de Quarto (caché y metadatos)
+/.quarto/
+
+# --- Python / Jupyter ---
+# Si usas código de IA/ML en tus posts, esto limpia el repo
+__pycache__/
+.ipynb_checkpoints/
+.virtualenvs/
+.venv/
+env/
+venv/
+*.py[cod]
+*$py.class
+
+# --- Typst / LaTeX ---
+# Ignoramos archivos auxiliares de compilación
+*.pdf
+*.log
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# --- Sistema y Editores ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# --- Gestión de dependencias (opcional pero recomendado) ---
+# Si usas uv, mise o similares
+.python-version
+.tool-versions
