@@ -1,0 +1,20 @@
+---
+title: "Edgardo Marchi"
+# subtitle: "Essays on Artificial Intelligence, Uncertainty, and Philosophy of Science"
+page-layout: article
+listing:
+  contents: posts
+  sort: "date desc"
+  type: default
+  categories: true
+  sort-ui: false
+  filter-ui: false
+  feed: true
+---
+
+::: {.lead}
+This space is a personal logbook (under construction).
+:::
+
+
+## Posts

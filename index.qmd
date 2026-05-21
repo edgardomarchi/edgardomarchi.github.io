@@ -1,18 +1,32 @@
 ---
 title: "Bienvenid@ / Welcome"
+# Evitamos que esta página aparezca en los buscadores como contenido duplicado
+robots: "noindex"
 ---
+
+:::: {.column-screen .text-center style="padding-top: 15vh;"}
+# Welcome / Bienvenido
 En construcción / Under construction
 
-::: {.columns}
-::: {.column width="45%"}
-### [Español](/es/index.qmd)
-:::
+Cargando contenido en su idioma... / Loading content in your language...
 
-::: {.column width="10%"}
-:::
+[Entrar en Español](/es/){.btn .btn-outline-primary .btn-lg role="button"}
+[Enter in English](/en/){.btn .btn-outline-secondary .btn-lg role="button"}
+::::
 
-::: {.column width="45%"}
-### [English](/en/index.qmd)
-
-:::
-:::
+```{include-after-body}
+<script>
+  (function() {
+    // Detectamos el idioma del navegador
+    var ln = window.navigator.language || window.navigator.userLanguage;
+    
+    // Si el idioma empieza por 'es', redirigimos a la carpeta /es/
+    if (ln.indexOf('es') === 0) {
+      window.location.href = "/es/";
+    } 
+    // En cualquier otro caso, redirigimos a /en/ (como idioma global)
+    else {
+      window.location.href = "/en/";
+    }
+  })();
+</script>

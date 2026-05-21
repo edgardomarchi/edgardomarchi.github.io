@@ -36,3 +36,4 @@ Thumbs.db
 # Si usas uv, mise o similares
 .python-version
 .tool-versions
+**/*.quarto_ipynb

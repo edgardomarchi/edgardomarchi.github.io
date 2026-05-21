@@ -1,0 +1,366 @@
+---
+title: "How to understand the performance of your ML code in Python"
+subtitle: "Systematic diagnosis: from the symptom to the real bottleneck"
+author: "Edgardo Marchi"
+date: last-modified
+categories: [python, performance, profiling, ML, JAX, PyTorch]
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: false
+    number-sections: true
+---
+
+## Introduction
+
+One of the most common mistakes when optimizing ML code is attacking the first visible symptom without diagnosing the root cause. This note describes a systematic diagnostic flow for Python code with PyTorch/JAX, illustrated with a real case of performance analysis of the [U-TraCE](https://github.com/edgardomarchi/utrace) package running on a Ryzen 5700G.
+
+The guiding principle is: **measure before modifying**. Every optimization decision should be backed by profiler evidence, not by intuition.
+
+---
+
+## The classic symptom: "only half the cores are active"
+
+When running parallel code (JAX, Numba, OpenCL, PyTorch), it is common to observe in the system monitor that only half of the logical processors appear active. On a Ryzen 5700G (8 physical cores + SMT = 16 logical), this manifests as 8 out of 16 cores in use.
+
+### Why it happens: SMT and dense algebra libraries
+
+This behavior **is not a bug** — it is a deliberate design decision of HPC libraries. The reason is empirical: for *compute-bound* workloads (dense algebra, vectorized numerical kernels), the two logical threads of the same physical core **share the execution units, the FPU, and the L1/L2 caches**. SMT is designed to hide memory latencies by interleaving heterogeneous work, not to double throughput when both threads already saturate the ALUs/FPUs.
+
+There is a documented case[@openblas1881] on an 88-core machine (44 physical + HT) where letting OpenBLAS use all threads produced an SVD in 11.9s, while limiting it to 44 threads reduced it to 3.29s — **3× faster with half the threads**. Oversubscription generates contention for shared core resources.
+
+For this reason, **Intel MKL, OpenBLAS, and most dense algebra backends default to `n_physical_cores` threads**, not `n_logical_cores`.
+
+### Verifying the pattern with `ps`
+
+```bash
+# See how many threads the process has
+ps -o nlwp <pid>
+# or equivalent:
+ls /proc/<pid>/task/ | wc -l
+
+# See which threads are running (state R) and on which logical core
+ps -L -o pid,tid,psr,stat,pcpu,comm -p <pid> --no-headers | awk '$4 ~ /^R/'
+
+# See state distribution
+ps -L -o stat -p <pid> --no-headers | sort | uniq -c
+```
+
+**Interpretation of typical output:**
+
+```
+405961  405961  13 Rl+  98.5 python3    ← main thread (TID=PID)
+405961  406031   2 Rl+  53.0 python3    ← worker 1
+405961  406032  12 Rl+  53.0 python3    ← worker 2
+...
+```
+
+The state flags mean:
+
+| Flag | Meaning |
+|------|-------------|
+| `R`  | Running (on CPU or in runqueue) |
+| `S`  | Sleeping (waiting for futex/condition) |
+| `l`  | Multi-threaded (process has LWPs) |
+| `+`  | In the foreground process group of the terminal |
+
+A typical distribution in JAX/PyTorch: few threads in `R`, many in `S`. The ~100 sleeping threads are thread pools from Eigen, BLAS, OpenMP — waiting for work, not consuming CPU.
+
+### The Linux scheduler and SMT-awareness
+
+The Linux CFS (Completely Fair Scheduler) is aware of SMT topology: when it has *N* compute-bound threads with *N* ≤ physical cores, it distributes them so that each thread occupies a full physical core, preventing two SMT sibling threads from competing with each other.
+
+On a Ryzen 5700G (Zen 3), Linux enumerates SMT pairs as `(cpu0, cpu8), (cpu1, cpu9), ..., (cpu7, cpu15)`. If the scheduler assigns threads to cores 0, 2, 3, 6, 9, 12, 13, 15, these correspond to 8 different physical cores — exactly one per SMT pair.
+
+```bash
+# Verify the SMT pairs of your hardware
+for i in $(seq 0 15); do
+  echo "cpu$i ↔ $(cat /sys/devices/system/cpu/cpu$i/topology/thread_siblings_list)"
+done
+```
+
+**Conclusion:** seeing half of the logical cores active is the correct and optimal behavior for dense algebra workloads.
+
+---
+
+## Diagnostic tools: operating system level
+
+### `perf` and `perf_event_paranoid`
+
+`perf` is the canonical Linux kernel tool for hardware performance. On systems with restrictive security configurations (common in Debian and derivatives), you might see the error:
+
+```
+Access to performance monitoring and observability operations is limited.
+perf_event_paranoid setting is 4
+```
+
+The levels of `perf_event_paranoid` are:
+
+| Value | Meaning |
+|-------|-------------|
+| -1    | Free access for all users |
+| 0     | Disables raw/ftrace access |
+| 1     | Disables access to CPU events |
+| 2     | Disables kernel profiling |
+| 3-4   | Debian/grsecurity extensions (more restrictive) |
+
+Values 3 and 4 are not part of the mainline kernel — they come from Debian/grsecurity patches and have been present since 2015 without going upstream.
+
+For temporary analysis without security risks:
+
+```bash
+# Temporary change (until next boot)
+sudo sysctl kernel.perf_event_paranoid=1
+
+# Verify current value
+cat /proc/sys/kernel/perf_event_paranoid
+```
+
+---
+
+## Profiling at the Python level: `py-spy`
+
+`py-spy` is a sampling profiler for Python that doesn't require modifying the source code and has very low overhead (~1%). It's the most practical tool for a first diagnosis.
+
+### Installation and basic use
+
+```bash
+# Install (with uv/pipx, preferable to global pip)
+pipx install py-spy
+
+# Top mode (interactive, like htop)
+sudo env "PATH=$PATH" py-spy top --pid <pid>
+
+# Sudo is necessary to access another user's process
+# env "PATH=$PATH" preserves the user's PATH (py-spy installed in ~/.local/bin)
+```
+
+::: {.callout-tip}
+## Why `env "PATH=$PATH"`
+`sudo` resets the default PATH. If `py-spy` is installed with `pipx` or `pip --user`, it ends up in `~/.local/bin`, which is not in root's PATH. Passing the variable explicitly solves this.
+:::
+
+### Reading the output of `py-spy top`
+
+```
+Collecting samples from 'python3 scripts/example.py'
+Total Samples 500
+GIL: 70.00%, Active: 94.00%, Threads: 1
+
+  %Own   %Total  OwnTime  TotalTime  Function (filename)
+```
+
+**The three indicators in the header are the most important:**
+
+**`GIL`** — percentage of samples where some Python thread held the GIL executing bytecode. High values (>50%) indicate that "pure" Python code dominates the wall-clock. The GIL is serial by definition: it doesn't scale with more cores.
+
+**`Active`** — percentage of samples where the process was doing work (including C/C++ extensions that released the GIL). A value close to 100% indicates that the process is not waiting on significant I/O.
+
+**`Threads`** — number of Python threads visible to py-spy. By default, it only shows threads that can hold the GIL. Native threads (Eigen, BLAS, OpenMP) are invisible unless `--native` is used.
+
+**The function columns:**
+
+| Column | Meaning |
+|---------|-------------|
+| `%Own` | Samples where the function is at the *top* of the stack (own cost) |
+| `%Total` | Samples where the function appears *anywhere* in the stack |
+| `OwnTime` | Accumulated time since the start of the profile (not the recent window) |
+| `TotalTime` | Same for the function and its callees |
+
+::: {.callout-warning}
+## `%Own`/`%Total` vs `OwnTime`/`TotalTime` — apparent inconsistency
+The percentages are calculated over a **recent window** (like `top`), while the times are **cumulative since the start**. A function with `%Own=0.00%` but `OwnTime=2.75s` was hot at the beginning of the profile and is no longer hot — its accumulated time is preserved even if it's not active now. This makes the rows look inconsistent; they are not.
+:::
+
+---
+
+## The GIL and its impact on ML
+
+### Diagnosis: High GIL at startup (70%)
+
+The first profile of the case study showed:
+
+```
+GIL: 70.00%, Active: 94.00%, Threads: 1
+```
+
+With GIL=70% and Active=94%, the approximate breakdown is:
+
+- **70%** Serial Python (under the GIL)
+- **24%** Multi-threaded C++ (released the GIL)
+- **6%** idle
+
+The dominant call stack pointed to `__getitem__` of the MNIST dataset, `to_tensor`, and `normalize` from torchvision — preprocessing operations running in the **main thread**, under the GIL, in series.
+
+**Diagnosis: the DataLoaders had `num_workers=0`** (synchronous mode). All preprocessing blocked the main thread before each forward pass.
+
+### Solution: `num_workers > 0`
+
+```python
+# Before (synchronous, GIL 70%)
+loader = DataLoader(dataset, batch_size=64, num_workers=0)
+
+# After (asynchronous, GIL ~0%)
+loader = DataLoader(dataset, batch_size=64, num_workers=4)
+```
+
+With `num_workers=4`, the DataLoaders launch 4 independent worker processes that prefetch the batches. The effect on the profile was immediate:
+
+| Metric | `num_workers=0` | `num_workers=4` |
+|---------|-----------------|-----------------|
+| GIL     | 70%             | **0%**          |
+| Active  | 94%             | 100%            |
+| Threads (Python) | 1      | 2               |
+
+The transforms functions disappeared from the top. They were replaced by multiprocessing IPC functions (`_feed`, `_recv`, `_launch`) with accumulated times of ~0.36s over 280s of wall-clock — **0.13% of the total time**. The overhead of inter-process communication is negligible.
+
+### Important: High GIL ≠ 70% of wall-clock
+
+GIL=70% means "in 70% of the samples, some Python thread held the GIL". It does not mean that 70% of the clock time is consumed by Python. Since data loading under the GIL can occur in *overlap* with convolutions (which release the GIL), the actual impact can be much smaller. Quantifying it requires measuring wall-clock with and without the optimization.
+
+---
+
+## Pulsing CPU: synchronization barriers per mini-batch
+
+After moving to `num_workers=4`, the CPU usage graph was still irregular: peaks at ~70% followed by valleys at ~20%, with a frequency of ~30-40 cycles in 60 seconds.
+
+### Diagnosis of the pulsing pattern
+
+This pattern is typical of a **synchronization barrier per mini-batch**. The main hypothesis:
+
+- **Peak** (~70%): forward pass executing multi-thread convolutions and matmuls
+- **Valley** (~20%): main thread blocked waiting for the next batch or executing serial Python/JAX phases between batches
+
+### How to measure valleys precisely
+
+**Option 1 — manual timers** (recommended as a first step):
+
+```python
+import time
+
+t_prev = time.perf_counter()
+for i, (x, y) in enumerate(loader):
+    t0 = time.perf_counter()
+    out = model(x)
+    t1 = time.perf_counter()
+    loss = criterion(out, y)
+    t2 = time.perf_counter()
+
+    if i % 20 == 0:
+        print(f"step {i:4d} | wait={t0-t_prev:.3f}  fwd={t1-t0:.3f}  loss={t2-t1:.3f}")
+    t_prev = t2
+```
+
+`wait` measures exactly how much time the main thread waited between the end of the previous step and the availability of the next batch.
+
+**Option 2 — py-spy with speedscope format** (preserves temporal axis):
+
+```bash
+py-spy record --format speedscope -o profile.json --pid <pid>
+# Open in https://www.speedscope.app
+```
+
+**Option 3 — system monitor aliasing**
+
+GNOME System Monitor samples at ~1Hz. If the real iteration period is on the order of 200-500ms (common in inference with MNIST), the monitor can show slow envelopes that don't reflect the real frequency. To rule this out:
+
+```bash
+# 10Hz sampling for 30 seconds
+while true; do
+  awk '/^cpu / {u=$2+$3+$4; t=u+$5; printf "%.1f\n", u/t*100}' /proc/stat
+  sleep 0.1
+done | head -300
+```
+
+If the pattern disappears with a higher sampling frequency, it was a visual artifact.
+
+---
+
+## The real bottleneck: architectural
+
+After resolving data loading, the profile pointed to three C++ PyTorch kernels consuming ~99% of the wall-clock:
+
+```
+_conv_forward    188.0s   (68%)
+relu              72.3s   (26%)
+forward (Linear)  14.4s   ( 5%)
+```
+
+In the U-TraCE case, analyzing the source code revealed a more serious bottleneck than threading: **the model's forward pass was recomputed ~51 times more than necessary per noise level**.
+
+### How to identify unnecessary recomputation
+
+The signal in code review is the presence of the same inference method (`predict_proba`, `forward`, etc.) in multiple nested loops operating on the **same data**:
+
+```python
+# Problematic pattern: same data, multiple loops → multiple forwards
+for noise in noises:                    # outer loop
+    for C in classes:                   # loop by class
+        for X, y in dataloader:         # loop by batch
+            probs = model(X)            # ← forward recomputed here
+            scores = uq.calibrate(probs, y)
+    
+    for C in classes:                   # second loop on the same data
+        for X, y in dataloader:
+            probs = model(X)            # ← same forward, again
+            scores = uq.get_uncertainty(probs, y)
+```
+
+**The solution:** separate model inference from metrics computation. Do a single forward pass over each dataset split, save the logits/probabilities, and pass them to all analysis functions that need them.
+
+```python
+# Efficient pattern: a single forward pass, output reuse
+all_probs = {split: model(X_split) for split, X_split in splits.items()}
+
+for noise in noises:
+    for C in classes:
+        scores = uq.calibrate(all_probs['cal'], y_cal)
+        scores = uq.get_uncertainty(all_probs['test'], y_test)
+```
+
+---
+
+## Recommended diagnostic flow
+
+```
+1. Observe symptom
+   └─ Only half the cores active?
+      → Normal for dense algebra. Verify with ps.
+   └─ Unexplainably slow process?
+      → Continue to step 2.
+
+2. py-spy top (overview)
+   ├─ High GIL (>50%) → serial Python bottleneck
+   │   └─ Transforms in the main thread? → num_workers > 0
+   │   └─ Another dominant Python function? → review it
+   ├─ Low GIL, High Active → multi-threaded C++ dominating
+   │   └─ py-spy doesn't help anymore → go to step 3
+   └─ Low Active → process is waiting (I/O, locks)
+       └─ strace, lsof, or instrument with time.perf_counter()
+
+3. Manual timers (if pulsing CPU)
+   └─ Measure wait/fwd/loss/bwd per iteration
+   └─ Identify which phase generates the valleys
+
+4. Code review for recomputation
+   └─ Does the same forward pass appear in multiple loops on the same data?
+   └─ Are logits/probabilities being cached between phases?
+```
+
+---
+
+## References and tools
+
+| Tool | Main use | Documentation |
+|-------------|---------------|---------------|
+| `py-spy` | Python sampling profiler, low overhead | [github.com/benfred/py-spy](https://github.com/benfred/py-spy) |
+| `perf` | Kernel/hardware level profiling | [perf.wiki.kernel.org](https://perf.wiki.kernel.org) |
+| `ps -L` | Thread inspection and their state | `man ps` |
+| `speedscope` | Flame graph visualization with temporal axis | [speedscope.app](https://www.speedscope.app) |
+| `torch.utils.bottleneck` | Integrated profiling in PyTorch | [docs.pytorch.org](https://pytorch.org/docs/stable/bottleneck.html) |
+
+::: {.callout-note}
+## About this note
+This document was built from a real analysis of the [U-TraCE](https://github.com/edgardomarchi/utrace) package, an uncertainty quantification method based on conformal prediction, running on a Ryzen 5700G with Arch Linux. The findings are specific to that environment but the diagnostic flow is general.
+:::
