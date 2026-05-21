@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.37">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Edgardo Marchi">
+<meta name="dcterms.date" content="2026-05-21">
+
+<title>Cómo entender la performance de tu código ML en Python – Edgardo Marchi</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../../">
+<script src="../../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../../site_libs/quarto-html/quarto-syntax-highlighting-2677a4e2fcee8638131a9779ef10e738.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../../site_libs/bootstrap/bootstrap-1e36ce679bcd9f8f3efb5f7dac8e9801.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+
+<meta property="og:title" content="Cómo entender la performance de tu código ML en Python – Edgardo Marchi">
+<meta property="og:description" content="Diagnóstico sistemático: del síntoma al bottleneck real">
+<meta property="og:site_name" content="Edgardo Marchi">
+<meta name="twitter:title" content="Cómo entender la performance de tu código ML en Python – Edgardo Marchi">
+<meta name="twitter:description" content="Diagnóstico sistemático: del síntoma al bottleneck real">
+<meta name="twitter:site" content="@tu_usuario">
+<meta name="twitter:card" content="summary_large_image">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../../index.html">
+    <span class="navbar-title">Edgardo Marchi</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll ms-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../../es/index.html"> 
+<span class="menu-text">Español</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../../en/index.html"> 
+<span class="menu-text">English</span></a>
+  </li>  
+  <li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/edgardomarchi"> <i class="bi bi-github" role="img">
+</i> 
+<span class="menu-text"></span></a>
+  </li>  
+  <li class="nav-item compact">
+    <a class="nav-link" href="https://www.linkedin.com/in/edgardomarchi/"> <i class="bi bi-linkedin" role="img">
+</i> 
+<span class="menu-text"></span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#introducción" id="toc-introducción" class="nav-link active" data-scroll-target="#introducción"><span class="header-section-number">1</span> Introducción</a></li>
+  <li><a href="#el-síntoma-clásico-solo-la-mitad-de-los-cores-están-activos" id="toc-el-síntoma-clásico-solo-la-mitad-de-los-cores-están-activos" class="nav-link" data-scroll-target="#el-síntoma-clásico-solo-la-mitad-de-los-cores-están-activos"><span class="header-section-number">2</span> El síntoma clásico: “solo la mitad de los cores están activos”</a>
+  <ul class="collapse">
+  <li><a href="#por-qué-ocurre-smt-y-las-bibliotecas-de-álgebra-densa" id="toc-por-qué-ocurre-smt-y-las-bibliotecas-de-álgebra-densa" class="nav-link" data-scroll-target="#por-qué-ocurre-smt-y-las-bibliotecas-de-álgebra-densa"><span class="header-section-number">2.1</span> Por qué ocurre: SMT y las bibliotecas de álgebra densa</a></li>
+  <li><a href="#verificar-el-patrón-con-ps" id="toc-verificar-el-patrón-con-ps" class="nav-link" data-scroll-target="#verificar-el-patrón-con-ps"><span class="header-section-number">2.2</span> Verificar el patrón con <code>ps</code></a></li>
+  <li><a href="#el-scheduler-de-linux-y-el-smt-awareness" id="toc-el-scheduler-de-linux-y-el-smt-awareness" class="nav-link" data-scroll-target="#el-scheduler-de-linux-y-el-smt-awareness"><span class="header-section-number">2.3</span> El scheduler de Linux y el SMT-awareness</a></li>
+  </ul></li>
+  <li><a href="#herramientas-de-diagnóstico-nivel-sistema-operativo" id="toc-herramientas-de-diagnóstico-nivel-sistema-operativo" class="nav-link" data-scroll-target="#herramientas-de-diagnóstico-nivel-sistema-operativo"><span class="header-section-number">3</span> Herramientas de diagnóstico: nivel sistema operativo</a>
+  <ul class="collapse">
+  <li><a href="#perf-y-perf_event_paranoid" id="toc-perf-y-perf_event_paranoid" class="nav-link" data-scroll-target="#perf-y-perf_event_paranoid"><span class="header-section-number">3.1</span> <code>perf</code> y <code>perf_event_paranoid</code></a></li>
+  </ul></li>
+  <li><a href="#profiling-a-nivel-python-py-spy" id="toc-profiling-a-nivel-python-py-spy" class="nav-link" data-scroll-target="#profiling-a-nivel-python-py-spy"><span class="header-section-number">4</span> Profiling a nivel Python: <code>py-spy</code></a>
+  <ul class="collapse">
+  <li><a href="#instalación-y-uso-básico" id="toc-instalación-y-uso-básico" class="nav-link" data-scroll-target="#instalación-y-uso-básico"><span class="header-section-number">4.1</span> Instalación y uso básico</a></li>
+  <li><a href="#leer-el-output-de-py-spy-top" id="toc-leer-el-output-de-py-spy-top" class="nav-link" data-scroll-target="#leer-el-output-de-py-spy-top"><span class="header-section-number">4.2</span> Leer el output de <code>py-spy top</code></a></li>
+  </ul></li>
+  <li><a href="#el-gil-y-su-impacto-en-ml" id="toc-el-gil-y-su-impacto-en-ml" class="nav-link" data-scroll-target="#el-gil-y-su-impacto-en-ml"><span class="header-section-number">5</span> El GIL y su impacto en ML</a>
+  <ul class="collapse">
+  <li><a href="#diagnóstico-gil-alto-al-inicio-70" id="toc-diagnóstico-gil-alto-al-inicio-70" class="nav-link" data-scroll-target="#diagnóstico-gil-alto-al-inicio-70"><span class="header-section-number">5.1</span> Diagnóstico: GIL alto al inicio (70%)</a></li>
+  <li><a href="#solución-num_workers-0" id="toc-solución-num_workers-0" class="nav-link" data-scroll-target="#solución-num_workers-0"><span class="header-section-number">5.2</span> Solución: <code>num_workers &gt; 0</code></a></li>
+  <li><a href="#importante-gil-alto-70-del-wall-clock" id="toc-importante-gil-alto-70-del-wall-clock" class="nav-link" data-scroll-target="#importante-gil-alto-70-del-wall-clock"><span class="header-section-number">5.3</span> Importante: GIL alto ≠ 70% del wall-clock</a></li>
+  </ul></li>
+  <li><a href="#cpu-pulsado-barreras-de-sincronización-por-mini-batch" id="toc-cpu-pulsado-barreras-de-sincronización-por-mini-batch" class="nav-link" data-scroll-target="#cpu-pulsado-barreras-de-sincronización-por-mini-batch"><span class="header-section-number">6</span> CPU pulsado: barreras de sincronización por mini-batch</a>
+  <ul class="collapse">
+  <li><a href="#diagnóstico-del-patrón-pulsado" id="toc-diagnóstico-del-patrón-pulsado" class="nav-link" data-scroll-target="#diagnóstico-del-patrón-pulsado"><span class="header-section-number">6.1</span> Diagnóstico del patrón pulsado</a></li>
+  <li><a href="#cómo-medir-los-valles-con-precisión" id="toc-cómo-medir-los-valles-con-precisión" class="nav-link" data-scroll-target="#cómo-medir-los-valles-con-precisión"><span class="header-section-number">6.2</span> Cómo medir los valles con precisión</a></li>
+  </ul></li>
+  <li><a href="#el-bottleneck-real-arquitectural" id="toc-el-bottleneck-real-arquitectural" class="nav-link" data-scroll-target="#el-bottleneck-real-arquitectural"><span class="header-section-number">7</span> El bottleneck real: arquitectural</a>
+  <ul class="collapse">
+  <li><a href="#cómo-identificar-recomputación-innecesaria" id="toc-cómo-identificar-recomputación-innecesaria" class="nav-link" data-scroll-target="#cómo-identificar-recomputación-innecesaria"><span class="header-section-number">7.1</span> Cómo identificar recomputación innecesaria</a></li>
+  </ul></li>
+  <li><a href="#flujo-de-diagnóstico-recomendado" id="toc-flujo-de-diagnóstico-recomendado" class="nav-link" data-scroll-target="#flujo-de-diagnóstico-recomendado"><span class="header-section-number">8</span> Flujo de diagnóstico recomendado</a></li>
+  <li><a href="#referencias-y-herramientas" id="toc-referencias-y-herramientas" class="nav-link" data-scroll-target="#referencias-y-herramientas"><span class="header-section-number">9</span> Referencias y herramientas</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Cómo entender la performance de tu código ML en Python</h1>
+<p class="subtitle lead">Diagnóstico sistemático: del síntoma al bottleneck real</p>
+  <div class="quarto-categories">
+    <div class="quarto-category">python</div>
+    <div class="quarto-category">performance</div>
+    <div class="quarto-category">profiling</div>
+    <div class="quarto-category">ML</div>
+    <div class="quarto-category">JAX</div>
+    <div class="quarto-category">PyTorch</div>
+  </div>
+  </div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Edgardo Marchi </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">May 21, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="introducción" class="level2" data-number="1">
+<h2 data-number="1" class="anchored" data-anchor-id="introducción"><span class="header-section-number">1</span> Introducción</h2>
+<p>Uno de los errores más comunes al optimizar código ML es atacar el primer síntoma visible sin diagnosticar la causa real. Este apunte describe un flujo de diagnóstico sistemático para código Python con PyTorch/JAX, ilustrado con un caso real de análisis de performance del paquete <a href="https://github.com/edgardomarchi/utrace">U-TraCE</a> corriendo sobre un Ryzen 5700G.</p>
+<p>El principio guía es: <strong>medir antes de modificar</strong>. Cada decisión de optimización debería estar respaldada por evidencia del profiler, no por intuición.</p>
+<hr>
+</section>
+<section id="el-síntoma-clásico-solo-la-mitad-de-los-cores-están-activos" class="level2" data-number="2">
+<h2 data-number="2" class="anchored" data-anchor-id="el-síntoma-clásico-solo-la-mitad-de-los-cores-están-activos"><span class="header-section-number">2</span> El síntoma clásico: “solo la mitad de los cores están activos”</h2>
+<p>Al ejecutar código con paralelismo (JAX, Numba, OpenCL, PyTorch), es habitual observar en el monitor de sistema que solo la mitad de los procesadores lógicos aparecen activos. En un Ryzen 5700G (8 cores físicos + SMT = 16 lógicos), esto se manifiesta como 8 de 16 cores en uso.</p>
+<section id="por-qué-ocurre-smt-y-las-bibliotecas-de-álgebra-densa" class="level3" data-number="2.1">
+<h3 data-number="2.1" class="anchored" data-anchor-id="por-qué-ocurre-smt-y-las-bibliotecas-de-álgebra-densa"><span class="header-section-number">2.1</span> Por qué ocurre: SMT y las bibliotecas de álgebra densa</h3>
+<p>Este comportamiento <strong>no es un bug</strong> — es una decisión de diseño deliberada de las bibliotecas de HPC. La razón es empírica: para cargas <em>compute-bound</em> (álgebra densa, kernels numéricos vectorizados), los dos hilos lógicos de un mismo core físico <strong>comparten las unidades de ejecución, la FPU, y las cachés L1/L2</strong>. SMT está diseñado para esconder latencias de memoria intercalando trabajo heterogéneo, no para duplicar throughput cuando ambos hilos ya saturan las ALU/FPU.</p>
+<p>Hay un caso documentado<span class="citation" data-cites="openblas1881">[@openblas1881]</span> en una máquina de 88 cores (44 físicos + HT) donde dejar a OpenBLAS usar todos los hilos producía un SVD en 11.9s, mientras que limitarlo a 44 hilos lo reducía a 3.29s — <strong>3× más rápido con la mitad de hilos</strong>. El oversubscription genera contención en los recursos compartidos del core.</p>
+<p>Por este motivo, <strong>Intel MKL, OpenBLAS, y la mayoría de los backends de álgebra densa defaultean a <code>n_cores_físicos</code> hilos</strong>, no a <code>n_cores_lógicos</code>.</p>
+</section>
+<section id="verificar-el-patrón-con-ps" class="level3" data-number="2.2">
+<h3 data-number="2.2" class="anchored" data-anchor-id="verificar-el-patrón-con-ps"><span class="header-section-number">2.2</span> Verificar el patrón con <code>ps</code></h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Ver cuántos hilos tiene el proceso</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">ps</span> <span class="at">-o</span> nlwp <span class="op">&lt;</span>pid<span class="op">&gt;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># o equivalente:</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">ls</span> /proc/<span class="op">&lt;</span>pid<span class="op">&gt;</span>/task/ <span class="kw">|</span> <span class="fu">wc</span> <span class="at">-l</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Ver qué hilos están corriendo (estado R) y en qué core lógico</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="fu">ps</span> <span class="at">-L</span> <span class="at">-o</span> pid,tid,psr,stat,pcpu,comm <span class="at">-p</span> <span class="op">&lt;</span>pid<span class="op">&gt;</span> --no-headers <span class="kw">|</span> <span class="fu">awk</span> <span class="st">'$4 ~ /^R/'</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Ver distribución de estados</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="fu">ps</span> <span class="at">-L</span> <span class="at">-o</span> stat <span class="at">-p</span> <span class="op">&lt;</span>pid<span class="op">&gt;</span> --no-headers <span class="kw">|</span> <span class="fu">sort</span> <span class="kw">|</span> <span class="fu">uniq</span> <span class="at">-c</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>Interpretación del output típico:</strong></p>
+<pre><code>405961  405961  13 Rl+  98.5 python3    ← main thread (TID=PID)
+405961  406031   2 Rl+  53.0 python3    ← worker 1
+405961  406032  12 Rl+  53.0 python3    ← worker 2
+...</code></pre>
+<p>Los flags de estado significan:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Flag</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>R</code></td>
+<td>Running (en CPU o en runqueue)</td>
+</tr>
+<tr class="even">
+<td><code>S</code></td>
+<td>Sleeping (esperando futex/condición)</td>
+</tr>
+<tr class="odd">
+<td><code>l</code></td>
+<td>Multi-threaded (el proceso tiene LWPs)</td>
+</tr>
+<tr class="even">
+<td><code>+</code></td>
+<td>En el foreground process group de la terminal</td>
+</tr>
+</tbody>
+</table>
+<p>Una distribución típica en JAX/PyTorch: pocos hilos en <code>R</code>, muchos en <code>S</code>. Los ~100 hilos dormidos son thread pools de Eigen, BLAS, OpenMP — esperando trabajo, no consumiendo CPU.</p>
+</section>
+<section id="el-scheduler-de-linux-y-el-smt-awareness" class="level3" data-number="2.3">
+<h3 data-number="2.3" class="anchored" data-anchor-id="el-scheduler-de-linux-y-el-smt-awareness"><span class="header-section-number">2.3</span> El scheduler de Linux y el SMT-awareness</h3>
+<p>Linux CFS (Completely Fair Scheduler) tiene awareness de la topología SMT: cuando tiene <em>N</em> hilos compute-bound con <em>N</em> ≤ cores físicos, los distribuye de forma que cada hilo ocupe un core físico completo, evitando que dos hilos hermanos SMT compitan entre sí.</p>
+<p>En un Ryzen 5700G (Zen 3), Linux enumera los pares SMT como <code>(cpu0, cpu8), (cpu1, cpu9), ..., (cpu7, cpu15)</code>. Si el scheduler asigna hilos a los cores 0, 2, 3, 6, 9, 12, 13, 15, estos corresponden a 8 cores físicos distintos — exactamente uno por par SMT.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Verificar los pares SMT de tu hardware</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="va">$(</span><span class="fu">seq</span> 0 15<span class="va">)</span><span class="kw">;</span> <span class="cf">do</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="bu">echo</span> <span class="st">"cpu</span><span class="va">$i</span><span class="st"> ↔ </span><span class="va">$(</span><span class="fu">cat</span> /sys/devices/system/cpu/cpu<span class="va">$i</span>/topology/thread_siblings_list<span class="va">)</span><span class="st">"</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="cf">done</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>Conclusión:</strong> ver la mitad de los cores lógicos activos es el comportamiento correcto y óptimo para cargas de álgebra densa.</p>
+<hr>
+</section>
+</section>
+<section id="herramientas-de-diagnóstico-nivel-sistema-operativo" class="level2" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="herramientas-de-diagnóstico-nivel-sistema-operativo"><span class="header-section-number">3</span> Herramientas de diagnóstico: nivel sistema operativo</h2>
+<section id="perf-y-perf_event_paranoid" class="level3" data-number="3.1">
+<h3 data-number="3.1" class="anchored" data-anchor-id="perf-y-perf_event_paranoid"><span class="header-section-number">3.1</span> <code>perf</code> y <code>perf_event_paranoid</code></h3>
+<p><code>perf</code> es la herramienta canónica del kernel Linux para performance hardware. En sistemas con configuración de seguridad restrictiva (habitual en Debian y derivados), puede aparecer el error:</p>
+<pre><code>Access to performance monitoring and observability operations is limited.
+perf_event_paranoid setting is 4</code></pre>
+<p>Los niveles de <code>perf_event_paranoid</code> son:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Valor</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>-1</td>
+<td>Acceso libre para todos los usuarios</td>
+</tr>
+<tr class="even">
+<td>0</td>
+<td>Deshabilita acceso raw/ftrace</td>
+</tr>
+<tr class="odd">
+<td>1</td>
+<td>Deshabilita acceso a eventos de CPU</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>Deshabilita profiling del kernel</td>
+</tr>
+<tr class="odd">
+<td>3-4</td>
+<td>Extensiones de Debian/grsecurity (más restrictivo)</td>
+</tr>
+</tbody>
+</table>
+<p>Los valores 3 y 4 no son parte del kernel mainline — vienen de parches de Debian/grsecurity y están presentes desde 2015 sin haber entrado a upstream.</p>
+<p>Para análisis temporales sin riesgo de seguridad:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Cambio temporal (hasta el próximo boot)</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">sudo</span> sysctl kernel.perf_event_paranoid=1</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Verificar valor actual</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span> /proc/sys/kernel/perf_event_paranoid</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<hr>
+</section>
+</section>
+<section id="profiling-a-nivel-python-py-spy" class="level2" data-number="4">
+<h2 data-number="4" class="anchored" data-anchor-id="profiling-a-nivel-python-py-spy"><span class="header-section-number">4</span> Profiling a nivel Python: <code>py-spy</code></h2>
+<p><code>py-spy</code> es un profiler de sampling para Python que no requiere modificar el código fuente y tiene overhead muy bajo (~1%). Es la herramienta más práctica para un primer diagnóstico.</p>
+<section id="instalación-y-uso-básico" class="level3" data-number="4.1">
+<h3 data-number="4.1" class="anchored" data-anchor-id="instalación-y-uso-básico"><span class="header-section-number">4.1</span> Instalación y uso básico</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Instalar (con uv/pipx, preferible a pip global)</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">pipx</span> install py-spy</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Modo top (interactivo, como htop)</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="fu">sudo</span> env <span class="st">"PATH=</span><span class="va">$PATH</span><span class="st">"</span> py-spy top <span class="at">--pid</span> <span class="op">&lt;</span>pid<span class="op">&gt;</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="co"># El sudo es necesario para acceder al proceso de otro usuario</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a><span class="co"># env "PATH=$PATH" preserva el PATH del usuario (py-spy instalado en ~/.local/bin)</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>Por qué <code>env "PATH=$PATH"</code>
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><code>sudo</code> resetea el PATH por defecto. Si <code>py-spy</code> está instalado con <code>pipx</code> o <code>pip --user</code>, queda en <code>~/.local/bin</code>, que no está en el PATH de root. Pasar la variable explícitamente lo resuelve.</p>
+</div>
+</div>
+</section>
+<section id="leer-el-output-de-py-spy-top" class="level3" data-number="4.2">
+<h3 data-number="4.2" class="anchored" data-anchor-id="leer-el-output-de-py-spy-top"><span class="header-section-number">4.2</span> Leer el output de <code>py-spy top</code></h3>
+<pre><code>Collecting samples from 'python3 scripts/example.py'
+Total Samples 500
+GIL: 70.00%, Active: 94.00%, Threads: 1
+
+  %Own   %Total  OwnTime  TotalTime  Function (filename)</code></pre>
+<p><strong>Los tres indicadores de la cabecera son los más importantes:</strong></p>
+<p><strong><code>GIL</code></strong> — porcentaje de muestras en las que algún thread Python sostenía el GIL ejecutando bytecode. Valores altos (&gt;50%) indican que el código Python “puro” domina el wall-clock. El GIL es serial por definición: no escala con más cores.</p>
+<p><strong><code>Active</code></strong> — porcentaje de muestras en que el proceso hacía trabajo (incluyendo extensiones C/C++ que liberaron el GIL). Un valor cercano a 100% indica que el proceso no espera I/O significativo.</p>
+<p><strong><code>Threads</code></strong> — número de threads Python visibles para py-spy. Por defecto solo muestra threads que pueden sostener el GIL. Los threads nativos (Eigen, BLAS, OpenMP) son invisibles salvo que se use <code>--native</code>.</p>
+<p><strong>Las columnas de funciones:</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 40%">
+<col style="width: 59%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Columna</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>%Own</code></td>
+<td>Muestras donde la función está en el <em>top</em> del stack (costo propio)</td>
+</tr>
+<tr class="even">
+<td><code>%Total</code></td>
+<td>Muestras donde la función aparece en <em>cualquier</em> posición del stack</td>
+</tr>
+<tr class="odd">
+<td><code>OwnTime</code></td>
+<td>Tiempo acumulado desde inicio del profile (no la ventana reciente)</td>
+</tr>
+<tr class="even">
+<td><code>TotalTime</code></td>
+<td>Ídem para la función y sus callees</td>
+</tr>
+</tbody>
+</table>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Warning</span><code>%Own</code>/<code>%Total</code> vs <code>OwnTime</code>/<code>TotalTime</code> — inconsistencia aparente
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Los porcentajes se calculan sobre una <strong>ventana reciente</strong> (como <code>top</code>), mientras que los tiempos son <strong>acumulativos desde el inicio</strong>. Una función con <code>%Own=0.00%</code> pero <code>OwnTime=2.75s</code> fue caliente al principio del profile y ya no lo es — su tiempo acumulado se preserva aunque no esté activa ahora. Esto hace que las filas parezcan inconsistentes; no lo son.</p>
+</div>
+</div>
+<hr>
+</section>
+</section>
+<section id="el-gil-y-su-impacto-en-ml" class="level2" data-number="5">
+<h2 data-number="5" class="anchored" data-anchor-id="el-gil-y-su-impacto-en-ml"><span class="header-section-number">5</span> El GIL y su impacto en ML</h2>
+<section id="diagnóstico-gil-alto-al-inicio-70" class="level3" data-number="5.1">
+<h3 data-number="5.1" class="anchored" data-anchor-id="diagnóstico-gil-alto-al-inicio-70"><span class="header-section-number">5.1</span> Diagnóstico: GIL alto al inicio (70%)</h3>
+<p>El primer profile del caso de estudio mostraba:</p>
+<pre><code>GIL: 70.00%, Active: 94.00%, Threads: 1</code></pre>
+<p>Con GIL=70% y Active=94%, el reparto aproximado es:</p>
+<ul>
+<li><strong>70%</strong> Python serial (bajo el GIL)</li>
+<li><strong>24%</strong> C++ multi-threaded (liberó el GIL)</li>
+<li><strong>6%</strong> idle</li>
+</ul>
+<p>El call stack dominante apuntaba a <code>__getitem__</code> del dataset MNIST, <code>to_tensor</code> y <code>normalize</code> de torchvision — operaciones de preprocessing corriendo en el <strong>main thread</strong>, bajo el GIL, en serie.</p>
+<p><strong>Diagnóstico: los DataLoaders tenían <code>num_workers=0</code></strong> (modo síncrono). Todo el preprocessing bloqueaba el thread principal antes de cada forward pass.</p>
+</section>
+<section id="solución-num_workers-0" class="level3" data-number="5.2">
+<h3 data-number="5.2" class="anchored" data-anchor-id="solución-num_workers-0"><span class="header-section-number">5.2</span> Solución: <code>num_workers &gt; 0</code></h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Antes (síncrono, GIL 70%)</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>loader <span class="op">=</span> DataLoader(dataset, batch_size<span class="op">=</span><span class="dv">64</span>, num_workers<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Después (asíncrono, GIL ~0%)</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>loader <span class="op">=</span> DataLoader(dataset, batch_size<span class="op">=</span><span class="dv">64</span>, num_workers<span class="op">=</span><span class="dv">4</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Con <code>num_workers=4</code>, los DataLoaders lanzan 4 procesos worker independientes que precargan los batches. El efecto en el profile fue inmediato:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Métrica</th>
+<th><code>num_workers=0</code></th>
+<th><code>num_workers=4</code></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>GIL</td>
+<td>70%</td>
+<td><strong>0%</strong></td>
+</tr>
+<tr class="even">
+<td>Active</td>
+<td>94%</td>
+<td>100%</td>
+</tr>
+<tr class="odd">
+<td>Threads (Python)</td>
+<td>1</td>
+<td>2</td>
+</tr>
+</tbody>
+</table>
+<p>Las funciones de transforms desaparecieron del top. Aparecieron en su lugar funciones de IPC de multiprocessing (<code>_feed</code>, <code>_recv</code>, <code>_launch</code>) con tiempos acumulados de ~0.36s sobre 280s de wall-clock — <strong>0.13% del tiempo total</strong>. El overhead de la comunicación entre procesos es despreciable.</p>
+</section>
+<section id="importante-gil-alto-70-del-wall-clock" class="level3" data-number="5.3">
+<h3 data-number="5.3" class="anchored" data-anchor-id="importante-gil-alto-70-del-wall-clock"><span class="header-section-number">5.3</span> Importante: GIL alto ≠ 70% del wall-clock</h3>
+<p>GIL=70% significa “en el 70% de las muestras, algún thread Python sostenía el GIL”. No significa que el 70% del tiempo de reloj lo consume Python. Como el data loading bajo el GIL puede ocurrir en <em>overlap</em> con las convoluciones (que liberan el GIL), el impacto real puede ser mucho menor. Cuantificarlo requiere medir wall-clock con y sin la optimización.</p>
+<hr>
+</section>
+</section>
+<section id="cpu-pulsado-barreras-de-sincronización-por-mini-batch" class="level2" data-number="6">
+<h2 data-number="6" class="anchored" data-anchor-id="cpu-pulsado-barreras-de-sincronización-por-mini-batch"><span class="header-section-number">6</span> CPU pulsado: barreras de sincronización por mini-batch</h2>
+<p>Después de mover a <code>num_workers=4</code>, el gráfico de uso de CPU seguía siendo irregular: picos al ~70% seguidos de valles al ~20%, con una frecuencia de ~30-40 ciclos en 60 segundos.</p>
+<section id="diagnóstico-del-patrón-pulsado" class="level3" data-number="6.1">
+<h3 data-number="6.1" class="anchored" data-anchor-id="diagnóstico-del-patrón-pulsado"><span class="header-section-number">6.1</span> Diagnóstico del patrón pulsado</h3>
+<p>Este patrón es típico de una <strong>barrera de sincronización por mini-batch</strong>. La hipótesis principal:</p>
+<ul>
+<li><strong>Pico</strong> (~70%): forward pass ejecutando convoluciones y matmuls multi-thread</li>
+<li><strong>Valle</strong> (~20%): main thread bloqueado esperando el próximo batch o ejecutando fases Python/JAX seriales entre batches</li>
+</ul>
+</section>
+<section id="cómo-medir-los-valles-con-precisión" class="level3" data-number="6.2">
+<h3 data-number="6.2" class="anchored" data-anchor-id="cómo-medir-los-valles-con-precisión"><span class="header-section-number">6.2</span> Cómo medir los valles con precisión</h3>
+<p><strong>Opción 1 — cronómetros manuales</strong> (recomendado como primer paso):</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> time</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>t_prev <span class="op">=</span> time.perf_counter()</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, (x, y) <span class="kw">in</span> <span class="bu">enumerate</span>(loader):</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    out <span class="op">=</span> model(x)</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    t1 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    loss <span class="op">=</span> criterion(out, y)</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>    t2 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> i <span class="op">%</span> <span class="dv">20</span> <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f"step </span><span class="sc">{</span>i<span class="sc">:4d}</span><span class="ss"> | wait=</span><span class="sc">{</span>t0<span class="op">-</span>t_prev<span class="sc">:.3f}</span><span class="ss">  fwd=</span><span class="sc">{</span>t1<span class="op">-</span>t0<span class="sc">:.3f}</span><span class="ss">  loss=</span><span class="sc">{</span>t2<span class="op">-</span>t1<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    t_prev <span class="op">=</span> t2</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><code>wait</code> mide exactamente cuánto tiempo el main thread esperó entre el fin del step anterior y la disponibilidad del próximo batch.</p>
+<p><strong>Opción 2 — py-spy con formato speedscope</strong> (preserva eje temporal):</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="ex">py-spy</span> record <span class="at">--format</span> speedscope <span class="at">-o</span> profile.json <span class="at">--pid</span> <span class="op">&lt;</span>pid<span class="op">&gt;</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Abrir en https://www.speedscope.app</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>Opción 3 — aliasing del monitor de sistema</strong></p>
+<p>GNOME System Monitor muestrea a ~1Hz. Si el período real de iteración es del orden de 200-500ms (común en inferencia con MNIST), el monitor puede mostrar envolventes lentas que no reflejan la frecuencia real. Para descartarlo:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Muestreo a 10Hz durante 30 segundos</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="cf">while</span> <span class="fu">true</span><span class="kw">;</span> <span class="cf">do</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">awk</span> <span class="st">'/^cpu / {u=$2+$3+$4; t=u+$5; printf "%.1f\n", u/t*100}'</span> /proc/stat</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sleep</span> 0.1</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="cf">done</span> <span class="kw">|</span> <span class="fu">head</span> <span class="at">-300</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Si con mayor frecuencia de muestreo el patrón desaparece, era un artefacto visual.</p>
+<hr>
+</section>
+</section>
+<section id="el-bottleneck-real-arquitectural" class="level2" data-number="7">
+<h2 data-number="7" class="anchored" data-anchor-id="el-bottleneck-real-arquitectural"><span class="header-section-number">7</span> El bottleneck real: arquitectural</h2>
+<p>Después de resolver el data loading, el profile apuntaba a tres kernels C++ de PyTorch consumiendo ~99% del wall-clock:</p>
+<pre><code>_conv_forward    188.0s   (68%)
+relu              72.3s   (26%)
+forward (Linear)  14.4s   ( 5%)</code></pre>
+<p>En el caso de U-TraCE, el análisis del código fuente reveló un bottleneck más grave que el threading: <strong>el forward pass del modelo se recomputaba ~51 veces más de lo necesario por nivel de noise</strong>.</p>
+<section id="cómo-identificar-recomputación-innecesaria" class="level3" data-number="7.1">
+<h3 data-number="7.1" class="anchored" data-anchor-id="cómo-identificar-recomputación-innecesaria"><span class="header-section-number">7.1</span> Cómo identificar recomputación innecesaria</h3>
+<p>La señal en el code review es la presencia del mismo método de inferencia (<code>predict_proba</code>, <code>forward</code>, etc.) en múltiples loops anidados que operan sobre los <strong>mismos datos</strong>:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Patrón problemático: mismos datos, múltiples loops → múltiples forwards</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> noise <span class="kw">in</span> noises:                    <span class="co"># loop externo</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> C <span class="kw">in</span> classes:                   <span class="co"># loop por clase</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> X, y <span class="kw">in</span> dataloader:         <span class="co"># loop por batch</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>            probs <span class="op">=</span> model(X)            <span class="co"># ← forward recomputado aquí</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>            scores <span class="op">=</span> uq.calibrate(probs, y)</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> C <span class="kw">in</span> classes:                   <span class="co"># segundo loop sobre los mismos datos</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> X, y <span class="kw">in</span> dataloader:</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>            probs <span class="op">=</span> model(X)            <span class="co"># ← mismo forward, de nuevo</span></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>            scores <span class="op">=</span> uq.get_uncertainty(probs, y)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><strong>La solución:</strong> separar la inferencia del modelo del cómputo de métricas. Hacer un único forward pass sobre cada split del dataset, guardar los logits/probabilidades, y pasarlos a todas las funciones de análisis que los necesiten.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Patrón eficiente: un único forward pass, reutilización de outputs</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>all_probs <span class="op">=</span> {split: model(X_split) <span class="cf">for</span> split, X_split <span class="kw">in</span> splits.items()}</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> noise <span class="kw">in</span> noises:</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> C <span class="kw">in</span> classes:</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>        scores <span class="op">=</span> uq.calibrate(all_probs[<span class="st">'cal'</span>], y_cal)</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>        scores <span class="op">=</span> uq.get_uncertainty(all_probs[<span class="st">'test'</span>], y_test)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<hr>
+</section>
+</section>
+<section id="flujo-de-diagnóstico-recomendado" class="level2" data-number="8">
+<h2 data-number="8" class="anchored" data-anchor-id="flujo-de-diagnóstico-recomendado"><span class="header-section-number">8</span> Flujo de diagnóstico recomendado</h2>
+<pre><code>1. Observar síntoma
+   └─ ¿Solo la mitad de los cores activos?
+      → Normal para álgebra densa. Verificar con ps.
+   └─ ¿Proceso lento de forma inexplicable?
+      → Continuar con paso 2.
+
+2. py-spy top (visión general)
+   ├─ GIL alto (&gt;50%) → bottleneck Python serial
+   │   └─ ¿Transforms en el main thread? → num_workers &gt; 0
+   │   └─ ¿Otra función Python dominante? → revisarla
+   ├─ GIL bajo, Active alto → C++ multi-threaded dominando
+   │   └─ py-spy no ayuda más → ir a paso 3
+   └─ Active bajo → el proceso espera (I/O, locks)
+       └─ strace, lsof, o instrumentar con time.perf_counter()
+
+3. Cronómetros manuales (si CPU pulsado)
+   └─ Medir wait/fwd/loss/bwd por iteración
+   └─ Identificar qué fase genera los valles
+
+4. Code review para recomputación
+   └─ ¿El mismo forward pass aparece en múltiples loops sobre los mismos datos?
+   └─ ¿Se están cachando los logits/probabilidades entre fases?</code></pre>
+<hr>
+</section>
+<section id="referencias-y-herramientas" class="level2" data-number="9">
+<h2 data-number="9" class="anchored" data-anchor-id="referencias-y-herramientas"><span class="header-section-number">9</span> Referencias y herramientas</h2>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Herramienta</th>
+<th>Uso principal</th>
+<th>Documentación</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>py-spy</code></td>
+<td>Profiler de sampling Python, bajo overhead</td>
+<td><a href="https://github.com/benfred/py-spy">github.com/benfred/py-spy</a></td>
+</tr>
+<tr class="even">
+<td><code>perf</code></td>
+<td>Profiling a nivel kernel/hardware</td>
+<td><a href="https://perf.wiki.kernel.org">perf.wiki.kernel.org</a></td>
+</tr>
+<tr class="odd">
+<td><code>ps -L</code></td>
+<td>Inspección de threads y su estado</td>
+<td><code>man ps</code></td>
+</tr>
+<tr class="even">
+<td><code>speedscope</code></td>
+<td>Visualización de flame graphs con eje temporal</td>
+<td><a href="https://www.speedscope.app">speedscope.app</a></td>
+</tr>
+<tr class="odd">
+<td><code>torch.utils.bottleneck</code></td>
+<td>Profiling integrado en PyTorch</td>
+<td><a href="https://pytorch.org/docs/stable/bottleneck.html">docs.pytorch.org</a></td>
+</tr>
+</tbody>
+</table>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Sobre este apunte
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Este documento fue construido a partir de un análisis real del paquete <a href="https://github.com/edgardomarchi/utrace">U-TraCE</a>, un método de cuantificación de incertidumbre basado en predicción conformal, corriendo sobre un Ryzen 5700G con Arch Linux. Los hallazgos son específicos de ese entorno pero el flujo de diagnóstico es general.</p>
+</div>
+</div>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/edgardomarchi\.github\.io");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

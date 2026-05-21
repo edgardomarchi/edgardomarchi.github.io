@@ -1,0 +1,815 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss  xmlns:atom="http://www.w3.org/2005/Atom" 
+      xmlns:media="http://search.yahoo.com/mrss/" 
+      xmlns:content="http://purl.org/rss/1.0/modules/content/" 
+      xmlns:dc="http://purl.org/dc/elements/1.1/" 
+      version="2.0">
+<channel>
+<title>Edgardo Marchi</title>
+<link>https://edgardomarchi.github.io/es/</link>
+<atom:link href="https://edgardomarchi.github.io/es/index.xml" rel="self" type="application/rss+xml"/>
+<description>IA, Incertidumbre, Cosmología y Pensamiento Crítico</description>
+<generator>quarto-1.9.37</generator>
+<lastBuildDate>Thu, 21 May 2026 15:41:09 GMT</lastBuildDate>
+<item>
+  <title>Cómo entender la performance de tu código ML en Python</title>
+  <dc:creator>Edgardo Marchi</dc:creator>
+  <link>https://edgardomarchi.github.io/es/posts/ml-python-performance/ml-python-performance.html</link>
+  <description><![CDATA[ 
+
+
+
+
+<section id="introducción" class="level2" data-number="1">
+<h2 data-number="1" class="anchored" data-anchor-id="introducción"><span class="header-section-number">1</span> Introducción</h2>
+<p>Uno de los errores más comunes al optimizar código ML es atacar el primer síntoma visible sin diagnosticar la causa real. Este apunte describe un flujo de diagnóstico sistemático para código Python con PyTorch/JAX, ilustrado con un caso real de análisis de performance del paquete <a href="https://github.com/edgardomarchi/utrace">U-TraCE</a> corriendo sobre un Ryzen 5700G.</p>
+<p>El principio guía es: <strong>medir antes de modificar</strong>. Cada decisión de optimización debería estar respaldada por evidencia del profiler, no por intuición.</p>
+<hr>
+</section>
+<section id="el-síntoma-clásico-solo-la-mitad-de-los-cores-están-activos" class="level2" data-number="2">
+<h2 data-number="2" class="anchored" data-anchor-id="el-síntoma-clásico-solo-la-mitad-de-los-cores-están-activos"><span class="header-section-number">2</span> El síntoma clásico: “solo la mitad de los cores están activos”</h2>
+<p>Al ejecutar código con paralelismo (JAX, Numba, OpenCL, PyTorch), es habitual observar en el monitor de sistema que solo la mitad de los procesadores lógicos aparecen activos. En un Ryzen 5700G (8 cores físicos + SMT = 16 lógicos), esto se manifiesta como 8 de 16 cores en uso.</p>
+<section id="por-qué-ocurre-smt-y-las-bibliotecas-de-álgebra-densa" class="level3" data-number="2.1">
+<h3 data-number="2.1" class="anchored" data-anchor-id="por-qué-ocurre-smt-y-las-bibliotecas-de-álgebra-densa"><span class="header-section-number">2.1</span> Por qué ocurre: SMT y las bibliotecas de álgebra densa</h3>
+<p>Este comportamiento <strong>no es un bug</strong> — es una decisión de diseño deliberada de las bibliotecas de HPC. La razón es empírica: para cargas <em>compute-bound</em> (álgebra densa, kernels numéricos vectorizados), los dos hilos lógicos de un mismo core físico <strong>comparten las unidades de ejecución, la FPU, y las cachés L1/L2</strong>. SMT está diseñado para esconder latencias de memoria intercalando trabajo heterogéneo, no para duplicar throughput cuando ambos hilos ya saturan las ALU/FPU.</p>
+<p>Hay un caso documentado<span class="citation" data-cites="openblas1881">[@openblas1881]</span> en una máquina de 88 cores (44 físicos + HT) donde dejar a OpenBLAS usar todos los hilos producía un SVD en 11.9s, mientras que limitarlo a 44 hilos lo reducía a 3.29s — <strong>3× más rápido con la mitad de hilos</strong>. El oversubscription genera contención en los recursos compartidos del core.</p>
+<p>Por este motivo, <strong>Intel MKL, OpenBLAS, y la mayoría de los backends de álgebra densa defaultean a <code>n_cores_físicos</code> hilos</strong>, no a <code>n_cores_lógicos</code>.</p>
+</section>
+<section id="verificar-el-patrón-con-ps" class="level3" data-number="2.2">
+<h3 data-number="2.2" class="anchored" data-anchor-id="verificar-el-patrón-con-ps"><span class="header-section-number">2.2</span> Verificar el patrón con <code>ps</code></h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1" style="background: #f1f3f5;"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Ver cuántos hilos tiene el proceso</span></span>
+<span id="cb1-2"><span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">ps</span> <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">-o</span> nlwp <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">&lt;</span>pid<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">&gt;</span></span>
+<span id="cb1-3"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># o equivalente:</span></span>
+<span id="cb1-4"><span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">ls</span> /proc/<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">&lt;</span>pid<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">&gt;</span>/task/ <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">|</span> <span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">wc</span> <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">-l</span></span>
+<span id="cb1-5"></span>
+<span id="cb1-6"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Ver qué hilos están corriendo (estado R) y en qué core lógico</span></span>
+<span id="cb1-7"><span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">ps</span> <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">-L</span> <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">-o</span> pid,tid,psr,stat,pcpu,comm <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">-p</span> <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">&lt;</span>pid<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">&gt;</span> --no-headers <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">|</span> <span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">awk</span> <span class="st" style="color: #20794D;
+background-color: null;
+font-style: inherit;">'$4 ~ /^R/'</span></span>
+<span id="cb1-8"></span>
+<span id="cb1-9"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Ver distribución de estados</span></span>
+<span id="cb1-10"><span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">ps</span> <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">-L</span> <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">-o</span> stat <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">-p</span> <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">&lt;</span>pid<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">&gt;</span> --no-headers <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">|</span> <span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">sort</span> <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">|</span> <span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">uniq</span> <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">-c</span></span></code></pre></div></div>
+<p><strong>Interpretación del output típico:</strong></p>
+<pre><code>405961  405961  13 Rl+  98.5 python3    ← main thread (TID=PID)
+405961  406031   2 Rl+  53.0 python3    ← worker 1
+405961  406032  12 Rl+  53.0 python3    ← worker 2
+...</code></pre>
+<p>Los flags de estado significan:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Flag</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>R</code></td>
+<td>Running (en CPU o en runqueue)</td>
+</tr>
+<tr class="even">
+<td><code>S</code></td>
+<td>Sleeping (esperando futex/condición)</td>
+</tr>
+<tr class="odd">
+<td><code>l</code></td>
+<td>Multi-threaded (el proceso tiene LWPs)</td>
+</tr>
+<tr class="even">
+<td><code>+</code></td>
+<td>En el foreground process group de la terminal</td>
+</tr>
+</tbody>
+</table>
+<p>Una distribución típica en JAX/PyTorch: pocos hilos en <code>R</code>, muchos en <code>S</code>. Los ~100 hilos dormidos son thread pools de Eigen, BLAS, OpenMP — esperando trabajo, no consumiendo CPU.</p>
+</section>
+<section id="el-scheduler-de-linux-y-el-smt-awareness" class="level3" data-number="2.3">
+<h3 data-number="2.3" class="anchored" data-anchor-id="el-scheduler-de-linux-y-el-smt-awareness"><span class="header-section-number">2.3</span> El scheduler de Linux y el SMT-awareness</h3>
+<p>Linux CFS (Completely Fair Scheduler) tiene awareness de la topología SMT: cuando tiene <em>N</em> hilos compute-bound con <em>N</em> ≤ cores físicos, los distribuye de forma que cada hilo ocupe un core físico completo, evitando que dos hilos hermanos SMT compitan entre sí.</p>
+<p>En un Ryzen 5700G (Zen 3), Linux enumera los pares SMT como <code>(cpu0, cpu8), (cpu1, cpu9), ..., (cpu7, cpu15)</code>. Si el scheduler asigna hilos a los cores 0, 2, 3, 6, 9, 12, 13, 15, estos corresponden a 8 cores físicos distintos — exactamente uno por par SMT.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3" style="background: #f1f3f5;"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Verificar los pares SMT de tu hardware</span></span>
+<span id="cb3-2"><span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">for</span> i <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">in</span> <span class="va" style="color: #111111;
+background-color: null;
+font-style: inherit;">$(</span><span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">seq</span> 0 15<span class="va" style="color: #111111;
+background-color: null;
+font-style: inherit;">)</span><span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">;</span> <span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">do</span></span>
+<span id="cb3-3">  <span class="bu" style="color: null;
+background-color: null;
+font-style: inherit;">echo</span> <span class="st" style="color: #20794D;
+background-color: null;
+font-style: inherit;">"cpu</span><span class="va" style="color: #111111;
+background-color: null;
+font-style: inherit;">$i</span><span class="st" style="color: #20794D;
+background-color: null;
+font-style: inherit;"> ↔ </span><span class="va" style="color: #111111;
+background-color: null;
+font-style: inherit;">$(</span><span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">cat</span> /sys/devices/system/cpu/cpu<span class="va" style="color: #111111;
+background-color: null;
+font-style: inherit;">$i</span>/topology/thread_siblings_list<span class="va" style="color: #111111;
+background-color: null;
+font-style: inherit;">)</span><span class="st" style="color: #20794D;
+background-color: null;
+font-style: inherit;">"</span></span>
+<span id="cb3-4"><span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">done</span></span></code></pre></div></div>
+<p><strong>Conclusión:</strong> ver la mitad de los cores lógicos activos es el comportamiento correcto y óptimo para cargas de álgebra densa.</p>
+<hr>
+</section>
+</section>
+<section id="herramientas-de-diagnóstico-nivel-sistema-operativo" class="level2" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="herramientas-de-diagnóstico-nivel-sistema-operativo"><span class="header-section-number">3</span> Herramientas de diagnóstico: nivel sistema operativo</h2>
+<section id="perf-y-perf_event_paranoid" class="level3" data-number="3.1">
+<h3 data-number="3.1" class="anchored" data-anchor-id="perf-y-perf_event_paranoid"><span class="header-section-number">3.1</span> <code>perf</code> y <code>perf_event_paranoid</code></h3>
+<p><code>perf</code> es la herramienta canónica del kernel Linux para performance hardware. En sistemas con configuración de seguridad restrictiva (habitual en Debian y derivados), puede aparecer el error:</p>
+<pre><code>Access to performance monitoring and observability operations is limited.
+perf_event_paranoid setting is 4</code></pre>
+<p>Los niveles de <code>perf_event_paranoid</code> son:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Valor</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>-1</td>
+<td>Acceso libre para todos los usuarios</td>
+</tr>
+<tr class="even">
+<td>0</td>
+<td>Deshabilita acceso raw/ftrace</td>
+</tr>
+<tr class="odd">
+<td>1</td>
+<td>Deshabilita acceso a eventos de CPU</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>Deshabilita profiling del kernel</td>
+</tr>
+<tr class="odd">
+<td>3-4</td>
+<td>Extensiones de Debian/grsecurity (más restrictivo)</td>
+</tr>
+</tbody>
+</table>
+<p>Los valores 3 y 4 no son parte del kernel mainline — vienen de parches de Debian/grsecurity y están presentes desde 2015 sin haber entrado a upstream.</p>
+<p>Para análisis temporales sin riesgo de seguridad:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5" style="background: #f1f3f5;"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb5-1"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Cambio temporal (hasta el próximo boot)</span></span>
+<span id="cb5-2"><span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">sudo</span> sysctl kernel.perf_event_paranoid=1</span>
+<span id="cb5-3"></span>
+<span id="cb5-4"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Verificar valor actual</span></span>
+<span id="cb5-5"><span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">cat</span> /proc/sys/kernel/perf_event_paranoid</span></code></pre></div></div>
+<hr>
+</section>
+</section>
+<section id="profiling-a-nivel-python-py-spy" class="level2" data-number="4">
+<h2 data-number="4" class="anchored" data-anchor-id="profiling-a-nivel-python-py-spy"><span class="header-section-number">4</span> Profiling a nivel Python: <code>py-spy</code></h2>
+<p><code>py-spy</code> es un profiler de sampling para Python que no requiere modificar el código fuente y tiene overhead muy bajo (~1%). Es la herramienta más práctica para un primer diagnóstico.</p>
+<section id="instalación-y-uso-básico" class="level3" data-number="4.1">
+<h3 data-number="4.1" class="anchored" data-anchor-id="instalación-y-uso-básico"><span class="header-section-number">4.1</span> Instalación y uso básico</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6" style="background: #f1f3f5;"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb6-1"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Instalar (con uv/pipx, preferible a pip global)</span></span>
+<span id="cb6-2"><span class="ex" style="color: null;
+background-color: null;
+font-style: inherit;">pipx</span> install py-spy</span>
+<span id="cb6-3"></span>
+<span id="cb6-4"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Modo top (interactivo, como htop)</span></span>
+<span id="cb6-5"><span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">sudo</span> env <span class="st" style="color: #20794D;
+background-color: null;
+font-style: inherit;">"PATH=</span><span class="va" style="color: #111111;
+background-color: null;
+font-style: inherit;">$PATH</span><span class="st" style="color: #20794D;
+background-color: null;
+font-style: inherit;">"</span> py-spy top <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">--pid</span> <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">&lt;</span>pid<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">&gt;</span></span>
+<span id="cb6-6"></span>
+<span id="cb6-7"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># El sudo es necesario para acceder al proceso de otro usuario</span></span>
+<span id="cb6-8"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># env "PATH=$PATH" preserva el PATH del usuario (py-spy instalado en ~/.local/bin)</span></span></code></pre></div></div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>Por qué <code>env "PATH=$PATH"</code>
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><code>sudo</code> resetea el PATH por defecto. Si <code>py-spy</code> está instalado con <code>pipx</code> o <code>pip --user</code>, queda en <code>~/.local/bin</code>, que no está en el PATH de root. Pasar la variable explícitamente lo resuelve.</p>
+</div>
+</div>
+</section>
+<section id="leer-el-output-de-py-spy-top" class="level3" data-number="4.2">
+<h3 data-number="4.2" class="anchored" data-anchor-id="leer-el-output-de-py-spy-top"><span class="header-section-number">4.2</span> Leer el output de <code>py-spy top</code></h3>
+<pre><code>Collecting samples from 'python3 scripts/example.py'
+Total Samples 500
+GIL: 70.00%, Active: 94.00%, Threads: 1
+
+  %Own   %Total  OwnTime  TotalTime  Function (filename)</code></pre>
+<p><strong>Los tres indicadores de la cabecera son los más importantes:</strong></p>
+<p><strong><code>GIL</code></strong> — porcentaje de muestras en las que algún thread Python sostenía el GIL ejecutando bytecode. Valores altos (&gt;50%) indican que el código Python “puro” domina el wall-clock. El GIL es serial por definición: no escala con más cores.</p>
+<p><strong><code>Active</code></strong> — porcentaje de muestras en que el proceso hacía trabajo (incluyendo extensiones C/C++ que liberaron el GIL). Un valor cercano a 100% indica que el proceso no espera I/O significativo.</p>
+<p><strong><code>Threads</code></strong> — número de threads Python visibles para py-spy. Por defecto solo muestra threads que pueden sostener el GIL. Los threads nativos (Eigen, BLAS, OpenMP) son invisibles salvo que se use <code>--native</code>.</p>
+<p><strong>Las columnas de funciones:</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 40%">
+<col style="width: 59%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Columna</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>%Own</code></td>
+<td>Muestras donde la función está en el <em>top</em> del stack (costo propio)</td>
+</tr>
+<tr class="even">
+<td><code>%Total</code></td>
+<td>Muestras donde la función aparece en <em>cualquier</em> posición del stack</td>
+</tr>
+<tr class="odd">
+<td><code>OwnTime</code></td>
+<td>Tiempo acumulado desde inicio del profile (no la ventana reciente)</td>
+</tr>
+<tr class="even">
+<td><code>TotalTime</code></td>
+<td>Ídem para la función y sus callees</td>
+</tr>
+</tbody>
+</table>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Warning</span><code>%Own</code>/<code>%Total</code> vs <code>OwnTime</code>/<code>TotalTime</code> — inconsistencia aparente
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Los porcentajes se calculan sobre una <strong>ventana reciente</strong> (como <code>top</code>), mientras que los tiempos son <strong>acumulativos desde el inicio</strong>. Una función con <code>%Own=0.00%</code> pero <code>OwnTime=2.75s</code> fue caliente al principio del profile y ya no lo es — su tiempo acumulado se preserva aunque no esté activa ahora. Esto hace que las filas parezcan inconsistentes; no lo son.</p>
+</div>
+</div>
+<hr>
+</section>
+</section>
+<section id="el-gil-y-su-impacto-en-ml" class="level2" data-number="5">
+<h2 data-number="5" class="anchored" data-anchor-id="el-gil-y-su-impacto-en-ml"><span class="header-section-number">5</span> El GIL y su impacto en ML</h2>
+<section id="diagnóstico-gil-alto-al-inicio-70" class="level3" data-number="5.1">
+<h3 data-number="5.1" class="anchored" data-anchor-id="diagnóstico-gil-alto-al-inicio-70"><span class="header-section-number">5.1</span> Diagnóstico: GIL alto al inicio (70%)</h3>
+<p>El primer profile del caso de estudio mostraba:</p>
+<pre><code>GIL: 70.00%, Active: 94.00%, Threads: 1</code></pre>
+<p>Con GIL=70% y Active=94%, el reparto aproximado es:</p>
+<ul>
+<li><strong>70%</strong> Python serial (bajo el GIL)</li>
+<li><strong>24%</strong> C++ multi-threaded (liberó el GIL)</li>
+<li><strong>6%</strong> idle</li>
+</ul>
+<p>El call stack dominante apuntaba a <code>__getitem__</code> del dataset MNIST, <code>to_tensor</code> y <code>normalize</code> de torchvision — operaciones de preprocessing corriendo en el <strong>main thread</strong>, bajo el GIL, en serie.</p>
+<p><strong>Diagnóstico: los DataLoaders tenían <code>num_workers=0</code></strong> (modo síncrono). Todo el preprocessing bloqueaba el thread principal antes de cada forward pass.</p>
+</section>
+<section id="solución-num_workers-0" class="level3" data-number="5.2">
+<h3 data-number="5.2" class="anchored" data-anchor-id="solución-num_workers-0"><span class="header-section-number">5.2</span> Solución: <code>num_workers &gt; 0</code></h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9" style="background: #f1f3f5;"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Antes (síncrono, GIL 70%)</span></span>
+<span id="cb9-2">loader <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> DataLoader(dataset, batch_size<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span><span class="dv" style="color: #AD0000;
+background-color: null;
+font-style: inherit;">64</span>, num_workers<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span><span class="dv" style="color: #AD0000;
+background-color: null;
+font-style: inherit;">0</span>)</span>
+<span id="cb9-3"></span>
+<span id="cb9-4"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Después (asíncrono, GIL ~0%)</span></span>
+<span id="cb9-5">loader <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> DataLoader(dataset, batch_size<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span><span class="dv" style="color: #AD0000;
+background-color: null;
+font-style: inherit;">64</span>, num_workers<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span><span class="dv" style="color: #AD0000;
+background-color: null;
+font-style: inherit;">4</span>)</span></code></pre></div></div>
+<p>Con <code>num_workers=4</code>, los DataLoaders lanzan 4 procesos worker independientes que precargan los batches. El efecto en el profile fue inmediato:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Métrica</th>
+<th><code>num_workers=0</code></th>
+<th><code>num_workers=4</code></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>GIL</td>
+<td>70%</td>
+<td><strong>0%</strong></td>
+</tr>
+<tr class="even">
+<td>Active</td>
+<td>94%</td>
+<td>100%</td>
+</tr>
+<tr class="odd">
+<td>Threads (Python)</td>
+<td>1</td>
+<td>2</td>
+</tr>
+</tbody>
+</table>
+<p>Las funciones de transforms desaparecieron del top. Aparecieron en su lugar funciones de IPC de multiprocessing (<code>_feed</code>, <code>_recv</code>, <code>_launch</code>) con tiempos acumulados de ~0.36s sobre 280s de wall-clock — <strong>0.13% del tiempo total</strong>. El overhead de la comunicación entre procesos es despreciable.</p>
+</section>
+<section id="importante-gil-alto-70-del-wall-clock" class="level3" data-number="5.3">
+<h3 data-number="5.3" class="anchored" data-anchor-id="importante-gil-alto-70-del-wall-clock"><span class="header-section-number">5.3</span> Importante: GIL alto ≠ 70% del wall-clock</h3>
+<p>GIL=70% significa “en el 70% de las muestras, algún thread Python sostenía el GIL”. No significa que el 70% del tiempo de reloj lo consume Python. Como el data loading bajo el GIL puede ocurrir en <em>overlap</em> con las convoluciones (que liberan el GIL), el impacto real puede ser mucho menor. Cuantificarlo requiere medir wall-clock con y sin la optimización.</p>
+<hr>
+</section>
+</section>
+<section id="cpu-pulsado-barreras-de-sincronización-por-mini-batch" class="level2" data-number="6">
+<h2 data-number="6" class="anchored" data-anchor-id="cpu-pulsado-barreras-de-sincronización-por-mini-batch"><span class="header-section-number">6</span> CPU pulsado: barreras de sincronización por mini-batch</h2>
+<p>Después de mover a <code>num_workers=4</code>, el gráfico de uso de CPU seguía siendo irregular: picos al ~70% seguidos de valles al ~20%, con una frecuencia de ~30-40 ciclos en 60 segundos.</p>
+<section id="diagnóstico-del-patrón-pulsado" class="level3" data-number="6.1">
+<h3 data-number="6.1" class="anchored" data-anchor-id="diagnóstico-del-patrón-pulsado"><span class="header-section-number">6.1</span> Diagnóstico del patrón pulsado</h3>
+<p>Este patrón es típico de una <strong>barrera de sincronización por mini-batch</strong>. La hipótesis principal:</p>
+<ul>
+<li><strong>Pico</strong> (~70%): forward pass ejecutando convoluciones y matmuls multi-thread</li>
+<li><strong>Valle</strong> (~20%): main thread bloqueado esperando el próximo batch o ejecutando fases Python/JAX seriales entre batches</li>
+</ul>
+</section>
+<section id="cómo-medir-los-valles-con-precisión" class="level3" data-number="6.2">
+<h3 data-number="6.2" class="anchored" data-anchor-id="cómo-medir-los-valles-con-precisión"><span class="header-section-number">6.2</span> Cómo medir los valles con precisión</h3>
+<p><strong>Opción 1 — cronómetros manuales</strong> (recomendado como primer paso):</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10" style="background: #f1f3f5;"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><span class="im" style="color: #00769E;
+background-color: null;
+font-style: inherit;">import</span> time</span>
+<span id="cb10-2"></span>
+<span id="cb10-3">t_prev <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> time.perf_counter()</span>
+<span id="cb10-4"><span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">for</span> i, (x, y) <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">in</span> <span class="bu" style="color: null;
+background-color: null;
+font-style: inherit;">enumerate</span>(loader):</span>
+<span id="cb10-5">    t0 <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> time.perf_counter()</span>
+<span id="cb10-6">    out <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> model(x)</span>
+<span id="cb10-7">    t1 <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> time.perf_counter()</span>
+<span id="cb10-8">    loss <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> criterion(out, y)</span>
+<span id="cb10-9">    t2 <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> time.perf_counter()</span>
+<span id="cb10-10"></span>
+<span id="cb10-11">    <span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">if</span> i <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">%</span> <span class="dv" style="color: #AD0000;
+background-color: null;
+font-style: inherit;">20</span> <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">==</span> <span class="dv" style="color: #AD0000;
+background-color: null;
+font-style: inherit;">0</span>:</span>
+<span id="cb10-12">        <span class="bu" style="color: null;
+background-color: null;
+font-style: inherit;">print</span>(<span class="ss" style="color: #20794D;
+background-color: null;
+font-style: inherit;">f"step </span><span class="sc" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">{</span>i<span class="sc" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">:4d}</span><span class="ss" style="color: #20794D;
+background-color: null;
+font-style: inherit;"> | wait=</span><span class="sc" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">{</span>t0<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">-</span>t_prev<span class="sc" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">:.3f}</span><span class="ss" style="color: #20794D;
+background-color: null;
+font-style: inherit;">  fwd=</span><span class="sc" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">{</span>t1<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">-</span>t0<span class="sc" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">:.3f}</span><span class="ss" style="color: #20794D;
+background-color: null;
+font-style: inherit;">  loss=</span><span class="sc" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">{</span>t2<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">-</span>t1<span class="sc" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">:.3f}</span><span class="ss" style="color: #20794D;
+background-color: null;
+font-style: inherit;">"</span>)</span>
+<span id="cb10-13">    t_prev <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> t2</span></code></pre></div></div>
+<p><code>wait</code> mide exactamente cuánto tiempo el main thread esperó entre el fin del step anterior y la disponibilidad del próximo batch.</p>
+<p><strong>Opción 2 — py-spy con formato speedscope</strong> (preserva eje temporal):</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11" style="background: #f1f3f5;"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb11-1"><span class="ex" style="color: null;
+background-color: null;
+font-style: inherit;">py-spy</span> record <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">--format</span> speedscope <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">-o</span> profile.json <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">--pid</span> <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">&lt;</span>pid<span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">&gt;</span></span>
+<span id="cb11-2"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Abrir en https://www.speedscope.app</span></span></code></pre></div></div>
+<p><strong>Opción 3 — aliasing del monitor de sistema</strong></p>
+<p>GNOME System Monitor muestrea a ~1Hz. Si el período real de iteración es del orden de 200-500ms (común en inferencia con MNIST), el monitor puede mostrar envolventes lentas que no reflejan la frecuencia real. Para descartarlo:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12" style="background: #f1f3f5;"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb12-1"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Muestreo a 10Hz durante 30 segundos</span></span>
+<span id="cb12-2"><span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">while</span> <span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">true</span><span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">;</span> <span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">do</span></span>
+<span id="cb12-3">  <span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">awk</span> <span class="st" style="color: #20794D;
+background-color: null;
+font-style: inherit;">'/^cpu / {u=$2+$3+$4; t=u+$5; printf "%.1f\n", u/t*100}'</span> /proc/stat</span>
+<span id="cb12-4">  <span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">sleep</span> 0.1</span>
+<span id="cb12-5"><span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">done</span> <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">|</span> <span class="fu" style="color: #4758AB;
+background-color: null;
+font-style: inherit;">head</span> <span class="at" style="color: #657422;
+background-color: null;
+font-style: inherit;">-300</span></span></code></pre></div></div>
+<p>Si con mayor frecuencia de muestreo el patrón desaparece, era un artefacto visual.</p>
+<hr>
+</section>
+</section>
+<section id="el-bottleneck-real-arquitectural" class="level2" data-number="7">
+<h2 data-number="7" class="anchored" data-anchor-id="el-bottleneck-real-arquitectural"><span class="header-section-number">7</span> El bottleneck real: arquitectural</h2>
+<p>Después de resolver el data loading, el profile apuntaba a tres kernels C++ de PyTorch consumiendo ~99% del wall-clock:</p>
+<pre><code>_conv_forward    188.0s   (68%)
+relu              72.3s   (26%)
+forward (Linear)  14.4s   ( 5%)</code></pre>
+<p>En el caso de U-TraCE, el análisis del código fuente reveló un bottleneck más grave que el threading: <strong>el forward pass del modelo se recomputaba ~51 veces más de lo necesario por nivel de noise</strong>.</p>
+<section id="cómo-identificar-recomputación-innecesaria" class="level3" data-number="7.1">
+<h3 data-number="7.1" class="anchored" data-anchor-id="cómo-identificar-recomputación-innecesaria"><span class="header-section-number">7.1</span> Cómo identificar recomputación innecesaria</h3>
+<p>La señal en el code review es la presencia del mismo método de inferencia (<code>predict_proba</code>, <code>forward</code>, etc.) en múltiples loops anidados que operan sobre los <strong>mismos datos</strong>:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14" style="background: #f1f3f5;"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Patrón problemático: mismos datos, múltiples loops → múltiples forwards</span></span>
+<span id="cb14-2"><span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">for</span> noise <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">in</span> noises:                    <span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># loop externo</span></span>
+<span id="cb14-3">    <span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">for</span> C <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">in</span> classes:                   <span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># loop por clase</span></span>
+<span id="cb14-4">        <span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">for</span> X, y <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">in</span> dataloader:         <span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># loop por batch</span></span>
+<span id="cb14-5">            probs <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> model(X)            <span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># ← forward recomputado aquí</span></span>
+<span id="cb14-6">            scores <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> uq.calibrate(probs, y)</span>
+<span id="cb14-7">    </span>
+<span id="cb14-8">    <span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">for</span> C <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">in</span> classes:                   <span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># segundo loop sobre los mismos datos</span></span>
+<span id="cb14-9">        <span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">for</span> X, y <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">in</span> dataloader:</span>
+<span id="cb14-10">            probs <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> model(X)            <span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># ← mismo forward, de nuevo</span></span>
+<span id="cb14-11">            scores <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> uq.get_uncertainty(probs, y)</span></code></pre></div></div>
+<p><strong>La solución:</strong> separar la inferencia del modelo del cómputo de métricas. Hacer un único forward pass sobre cada split del dataset, guardar los logits/probabilidades, y pasarlos a todas las funciones de análisis que los necesiten.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15" style="background: #f1f3f5;"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><span class="co" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;"># Patrón eficiente: un único forward pass, reutilización de outputs</span></span>
+<span id="cb15-2">all_probs <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> {split: model(X_split) <span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">for</span> split, X_split <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">in</span> splits.items()}</span>
+<span id="cb15-3"></span>
+<span id="cb15-4"><span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">for</span> noise <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">in</span> noises:</span>
+<span id="cb15-5">    <span class="cf" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">for</span> C <span class="kw" style="color: #003B4F;
+background-color: null;
+font-weight: bold;
+font-style: inherit;">in</span> classes:</span>
+<span id="cb15-6">        scores <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> uq.calibrate(all_probs[<span class="st" style="color: #20794D;
+background-color: null;
+font-style: inherit;">'cal'</span>], y_cal)</span>
+<span id="cb15-7">        scores <span class="op" style="color: #5E5E5E;
+background-color: null;
+font-style: inherit;">=</span> uq.get_uncertainty(all_probs[<span class="st" style="color: #20794D;
+background-color: null;
+font-style: inherit;">'test'</span>], y_test)</span></code></pre></div></div>
+<hr>
+</section>
+</section>
+<section id="flujo-de-diagnóstico-recomendado" class="level2" data-number="8">
+<h2 data-number="8" class="anchored" data-anchor-id="flujo-de-diagnóstico-recomendado"><span class="header-section-number">8</span> Flujo de diagnóstico recomendado</h2>
+<pre><code>1. Observar síntoma
+   └─ ¿Solo la mitad de los cores activos?
+      → Normal para álgebra densa. Verificar con ps.
+   └─ ¿Proceso lento de forma inexplicable?
+      → Continuar con paso 2.
+
+2. py-spy top (visión general)
+   ├─ GIL alto (&gt;50%) → bottleneck Python serial
+   │   └─ ¿Transforms en el main thread? → num_workers &gt; 0
+   │   └─ ¿Otra función Python dominante? → revisarla
+   ├─ GIL bajo, Active alto → C++ multi-threaded dominando
+   │   └─ py-spy no ayuda más → ir a paso 3
+   └─ Active bajo → el proceso espera (I/O, locks)
+       └─ strace, lsof, o instrumentar con time.perf_counter()
+
+3. Cronómetros manuales (si CPU pulsado)
+   └─ Medir wait/fwd/loss/bwd por iteración
+   └─ Identificar qué fase genera los valles
+
+4. Code review para recomputación
+   └─ ¿El mismo forward pass aparece en múltiples loops sobre los mismos datos?
+   └─ ¿Se están cachando los logits/probabilidades entre fases?</code></pre>
+<hr>
+</section>
+<section id="referencias-y-herramientas" class="level2" data-number="9">
+<h2 data-number="9" class="anchored" data-anchor-id="referencias-y-herramientas"><span class="header-section-number">9</span> Referencias y herramientas</h2>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Herramienta</th>
+<th>Uso principal</th>
+<th>Documentación</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>py-spy</code></td>
+<td>Profiler de sampling Python, bajo overhead</td>
+<td><a href="https://github.com/benfred/py-spy">github.com/benfred/py-spy</a></td>
+</tr>
+<tr class="even">
+<td><code>perf</code></td>
+<td>Profiling a nivel kernel/hardware</td>
+<td><a href="https://perf.wiki.kernel.org">perf.wiki.kernel.org</a></td>
+</tr>
+<tr class="odd">
+<td><code>ps -L</code></td>
+<td>Inspección de threads y su estado</td>
+<td><code>man ps</code></td>
+</tr>
+<tr class="even">
+<td><code>speedscope</code></td>
+<td>Visualización de flame graphs con eje temporal</td>
+<td><a href="https://www.speedscope.app">speedscope.app</a></td>
+</tr>
+<tr class="odd">
+<td><code>torch.utils.bottleneck</code></td>
+<td>Profiling integrado en PyTorch</td>
+<td><a href="https://pytorch.org/docs/stable/bottleneck.html">docs.pytorch.org</a></td>
+</tr>
+</tbody>
+</table>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Sobre este apunte
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Este documento fue construido a partir de un análisis real del paquete <a href="https://github.com/edgardomarchi/utrace">U-TraCE</a>, un método de cuantificación de incertidumbre basado en predicción conformal, corriendo sobre un Ryzen 5700G con Arch Linux. Los hallazgos son específicos de ese entorno pero el flujo de diagnóstico es general.</p>
+</div>
+</div>
+
+
+</section>
+
+ ]]></description>
+  <category>python</category>
+  <category>performance</category>
+  <category>profiling</category>
+  <category>ML</category>
+  <category>JAX</category>
+  <category>PyTorch</category>
+  <guid>https://edgardomarchi.github.io/es/posts/ml-python-performance/ml-python-performance.html</guid>
+  <pubDate>Thu, 21 May 2026 15:41:09 GMT</pubDate>
+</item>
+</channel>
+</rss>
