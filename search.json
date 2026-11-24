@@ -1,40 +1,5 @@
 [
   {
-    "objectID": "es/index.html",
-    "href": "es/index.html",
-    "title": "Edgardo Marchi",
-    "section": "",
-    "text": "Este espacio es un cuaderno de bitácora personal (en construcción)."
-  },
-  {
-    "objectID": "es/index.html#posts",
-    "href": "es/index.html#posts",
-    "title": "Edgardo Marchi",
-    "section": "1 Posts",
-    "text": "1 Posts"
-  },
-  {
-    "objectID": "index.html",
-    "href": "index.html",
-    "title": "Bienvenid@ / Welcome",
-    "section": "",
-    "text": "1 Welcome / Bienvenido\nEn construcción / Under construction\nCargando contenido en su idioma… / Loading content in your language…\nEntrar en Español Enter in English\n\n```tnsferqezotscbhziwdd"
-  },
-  {
-    "objectID": "en/index.html",
-    "href": "en/index.html",
-    "title": "Edgardo Marchi",
-    "section": "",
-    "text": "This space is a personal logbook (under construction)."
-  },
-  {
-    "objectID": "en/index.html#posts",
-    "href": "en/index.html#posts",
-    "title": "Edgardo Marchi",
-    "section": "1 Posts",
-    "text": "1 Posts"
-  },
-  {
     "objectID": "en/ml-python-performance/ml-python-performance.html",
     "href": "en/ml-python-performance/ml-python-performance.html",
     "title": "How to understand the performance of your ML code in Python",
@@ -105,6 +70,13 @@
     "text": "9 References and tools\n\n\n\nTool\nMain use\nDocumentation\n\n\n\n\npy-spy\nPython sampling profiler, low overhead\ngithub.com/benfred/py-spy\n\n\nperf\nKernel/hardware level profiling\nperf.wiki.kernel.org\n\n\nps -L\nThread inspection and their state\nman ps\n\n\nspeedscope\nFlame graph visualization with temporal axis\nspeedscope.app\n\n\ntorch.utils.bottleneck\nIntegrated profiling in PyTorch\ndocs.pytorch.org\n\n\n\n\n\n\n\n\n\nNoteAbout this note\n\n\n\nThis document was built from a real analysis of the U-TraCE package, an uncertainty quantification method based on conformal prediction, running on a Ryzen 5700G with Arch Linux. The findings are specific to that environment but the diagnostic flow is general."
   },
   {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Bienvenid@ / Welcome",
+    "section": "",
+    "text": "1 Welcome / Bienvenido\nEn construcción / Under construction\nCargando contenido en su idioma… / Loading content in your language…\nEntrar en Español Enter in English\n\n```ixxhdvydctbkcrtykewz"
+  },
+  {
     "objectID": "es/posts/ml-python-performance/ml-python-performance.html",
     "href": "es/posts/ml-python-performance/ml-python-performance.html",
     "title": "Cómo entender la performance de tu código ML en Python",
@@ -173,5 +145,33 @@
     "title": "Cómo entender la performance de tu código ML en Python",
     "section": "9 Referencias y herramientas",
     "text": "9 Referencias y herramientas\n\n\n\nHerramienta\nUso principal\nDocumentación\n\n\n\n\npy-spy\nProfiler de sampling Python, bajo overhead\ngithub.com/benfred/py-spy\n\n\nperf\nProfiling a nivel kernel/hardware\nperf.wiki.kernel.org\n\n\nps -L\nInspección de threads y su estado\nman ps\n\n\nspeedscope\nVisualización de flame graphs con eje temporal\nspeedscope.app\n\n\ntorch.utils.bottleneck\nProfiling integrado en PyTorch\ndocs.pytorch.org\n\n\n\n\n\n\n\n\n\nNoteSobre este apunte\n\n\n\nEste documento fue construido a partir de un análisis real del paquete U-TraCE, un método de cuantificación de incertidumbre basado en predicción conformal, corriendo sobre un Ryzen 5700G con Arch Linux. Los hallazgos son específicos de ese entorno pero el flujo de diagnóstico es general."
+  },
+  {
+    "objectID": "es/index.html",
+    "href": "es/index.html",
+    "title": "Edgardo Marchi",
+    "section": "",
+    "text": "Este espacio es un cuaderno de bitácora personal (en construcción)."
+  },
+  {
+    "objectID": "es/index.html#posts",
+    "href": "es/index.html#posts",
+    "title": "Edgardo Marchi",
+    "section": "1 Posts",
+    "text": "1 Posts"
+  },
+  {
+    "objectID": "en/index.html",
+    "href": "en/index.html",
+    "title": "Edgardo Marchi",
+    "section": "",
+    "text": "This space is a personal logbook (under construction)."
+  },
+  {
+    "objectID": "en/index.html#posts",
+    "href": "en/index.html#posts",
+    "title": "Edgardo Marchi",
+    "section": "1 Posts",
+    "text": "1 Posts"
   }
 ]

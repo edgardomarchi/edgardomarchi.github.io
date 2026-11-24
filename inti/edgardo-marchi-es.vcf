@@ -1,0 +1,15 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Marchi;Edgardo;J.;Dr. Ing.;
+FN:Edgardo J. Marchi
+ORG:INTI - Instituto Nacional de Tecnología Industrial;Departamento de Inteligencia Artificial
+TITLE:Jefe de Departamento de Inteligencia Artificial
+TEL;TYPE=WORK,VOICE,PREF:+54 11 4724-6239
+TEL;TYPE=WORK,VOICE:+54 11 4724-6200
+EMAIL;TYPE=INTERNET,WORK:emarchi@inti.gob.ar
+URL:https://edgardomarchi.github.io/inti/
+ADR;TYPE=WORK:;;Av. General Paz 5445;San Martín;Buenos Aires;;Argentina
+X-SOCIALPROFILE;TYPE=linkedin:https://www.linkedin.com/in/edgardomarchi/
+URL;TYPE=LinkedIn:https://www.linkedin.com/in/edgardomarchi/
+NOTE:Interno 6239 (conmutador +54 11 4724-6200 / 6300)
+END:VCARD

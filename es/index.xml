@@ -9,8 +9,8 @@
 <link>https://edgardomarchi.github.io/es/</link>
 <atom:link href="https://edgardomarchi.github.io/es/index.xml" rel="self" type="application/rss+xml"/>
 <description>IA, Incertidumbre, Cosmología y Pensamiento Crítico</description>
-<generator>quarto-1.9.37</generator>
-<lastBuildDate>Thu, 21 May 2026 15:41:09 GMT</lastBuildDate>
+<generator>quarto-1.11.9</generator>
+<lastBuildDate>Tue, 24 Nov 2026 13:24:23 GMT</lastBuildDate>
 <item>
   <title>Cómo entender la performance de tu código ML en Python</title>
   <dc:creator>Edgardo Marchi</dc:creator>
@@ -809,7 +809,7 @@ font-style: inherit;">'test'</span>], y_test)</span></code></pre></div></div>
   <category>JAX</category>
   <category>PyTorch</category>
   <guid>https://edgardomarchi.github.io/es/posts/ml-python-performance/ml-python-performance.html</guid>
-  <pubDate>Thu, 21 May 2026 15:41:09 GMT</pubDate>
+  <pubDate>Tue, 24 Nov 2026 13:24:23 GMT</pubDate>
 </item>
 </channel>
 </rss>
