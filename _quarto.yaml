@@ -1,6 +1,9 @@
 project:
   type: website
   output-dir: _site
+  # Tarjeta de contacto INTI: HTML puro, se copia tal cual sin pasar por Quarto
+  resources:
+    - "inti/**"
 
 website:
   title: "Edgardo Marchi"

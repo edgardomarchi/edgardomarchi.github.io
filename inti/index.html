@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Edgardo J. Marchi — INTI</title>
+  <meta name="robots" content="noindex">
+  <script>
+    // Misma lógica que el index raíz del sitio: español si el navegador está en español, inglés en otro caso.
+    (function () {
+      var langs = navigator.languages || [navigator.language || navigator.userLanguage || ""];
+      var es = String(langs[0] || "").toLowerCase().indexOf("es") === 0;
+      location.replace(es ? "es/" : "en/");
+    })();
+  </script>
+</head>
+<body style="font-family: system-ui, sans-serif; text-align: center; padding-top: 30vh;">
+  <p><a href="es/">Español</a> · <a href="en/">English</a></p>
+</body>
+</html>

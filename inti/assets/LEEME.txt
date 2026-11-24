@@ -1,0 +1,4 @@
+Poner acá:
+- logo-inti.png  (logo del INTI, de la intranet)
+- foto.jpg       (foto, cuadrada, ~600x600 px, idealmente < 200 KB)
+Mientras no estén, la tarjeta muestra "INTI" y las iniciales "EM".
